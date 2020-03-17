@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
@@ -202,7 +203,17 @@ func (ds *dockerService) getContainerLogPath(containerID string) (string, string
 	if err != nil {
 		return "", "", fmt.Errorf("failed to inspect container %q: %v", containerID, err)
 	}
-	return info.Config.Labels[containerLogPathLabelKey], info.LogPath, nil
+
+	if info.LogPath != "" {
+		return info.Config.Labels[containerLogPathLabelKey], info.LogPath, nil
+	}
+
+	if strings.HasSuffix(ds.noJsonLogPath, "/") && len(ds.noJsonLogPath) > 1 {
+		ds.noJsonLogPath = strings.TrimSuffix(ds.noJsonLogPath, "/")
+	}
+	customLogPath := fmt.Sprintf("%s/%s/%s.log", ds.noJsonLogPath, info.ID, info.ID)
+
+	return info.Config.Labels[containerLogPathLabelKey], customLogPath, nil
 }
 
 // createContainerLogSymlink creates the symlink for docker container log.

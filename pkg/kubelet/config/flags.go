@@ -76,6 +76,9 @@ type ContainerRuntimeOptions struct {
 	// CNICacheDir is the full path of the directory in which CNI should store
 	// cache files
 	CNICacheDir string
+
+	// Docker inspect 返回的 logPath 为空的时候，log 的存放路径。syslog driver 就符合该你条件
+	NoJsonLogPath string
 }
 
 // AddFlags adds flags to the container runtime, according to ContainerRuntimeOptions.
@@ -102,4 +105,7 @@ func (s *ContainerRuntimeOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.CNIBinDir, "cni-bin-dir", s.CNIBinDir, fmt.Sprintf("<Warning: Alpha feature> A comma-separated list of full paths of directories in which to search for CNI plugin binaries. %s", dockerOnlyWarning))
 	fs.StringVar(&s.CNICacheDir, "cni-cache-dir", s.CNICacheDir, fmt.Sprintf("<Warning: Alpha feature> The full path of the directory in which CNI should store cache files. %s", dockerOnlyWarning))
 	fs.Int32Var(&s.NetworkPluginMTU, "network-plugin-mtu", s.NetworkPluginMTU, fmt.Sprintf("<Warning: Alpha feature> The MTU to be passed to the network plugin, to override the default. Set to 0 to use the default 1460 MTU. %s", dockerOnlyWarning))
+
+	// no Json Log Path, such as syslog driver
+	fs.StringVar(&s.NoJsonLogPath, "no-json-log-path", s.NoJsonLogPath, "no Json Log Path, such as syslog driver. eg: /home/whale/docker/containers")
 }
