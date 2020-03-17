@@ -41,6 +41,11 @@ const (
 	containerPortsLabel                    = "io.kubernetes.container.ports"
 )
 
+// Netease extension Log driver
+const (
+	containerLogDriverLabel                = "symphony.alphav1.log-driver"
+)
+
 type labeledPodSandboxInfo struct {
 	// Labels from v1.Pod
 	Labels       map[string]string
@@ -117,6 +122,15 @@ func newContainerAnnotations(container *v1.Container, pod *v1.Pod, restartCount 
 	annotations[containerRestartCountLabel] = strconv.Itoa(restartCount)
 	annotations[containerTerminationMessagePathLabel] = container.TerminationMessagePath
 	annotations[containerTerminationMessagePolicyLabel] = string(container.TerminationMessagePolicy)
+
+	if pod.ObjectMeta.Annotations[containerLogDriverLabel] == "syslog" {
+		annotations[containerLogDriverLabel] = "syslog"
+		annotations["symphony.alphav1.log-driver.syslog-address"] = pod.ObjectMeta.Annotations["symphony.alphav1.log-driver.syslog-address"]
+		annotations["symphony.alphav1.log-driver.tag"] = pod.ObjectMeta.Annotations["symphony.alphav1.log-driver.tag"]
+		annotations["symphony.alphav1.log-driver.syslog-format"] = pod.ObjectMeta.Annotations["symphony.alphav1.log-driver.syslog-format"]
+		annotations["symphony.alphav1.log-driver.syslog-facility"] = pod.ObjectMeta.Annotations["symphony.alphav1.log-driver.syslog-facility"]
+
+	}
 
 	if pod.DeletionGracePeriodSeconds != nil {
 		annotations[podDeletionGracePeriodLabel] = strconv.FormatInt(*pod.DeletionGracePeriodSeconds, 10)
