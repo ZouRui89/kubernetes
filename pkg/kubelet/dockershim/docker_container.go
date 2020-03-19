@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	dockertypes "github.com/docker/docker/api/types"
@@ -157,6 +158,25 @@ func (ds *dockerService) CreateContainer(_ context.Context, r *runtimeapi.Create
 			CgroupPermissions: device.Permissions,
 		}
 	}
+	// 添加对 log driver 的支持
+	annotations := config.GetAnnotations()
+	if annotations["symphony.alphav1.log-driver"] == "syslog" {
+		klog.V(5).Infof("gztianshuai setting log-driver: %v", annotations)
+		logConfigMap := make(map[string]string)
+		logConfigMap = map[string]string{
+			"syslog-address":  annotations["symphony.alphav1.log-driver.syslog-address"],
+			"tag":             annotations["symphony.alphav1.log-driver.tag"],
+			"syslog-format":   annotations["symphony.alphav1.log-driver.syslog-format"],
+			"syslog-facility": annotations["symphony.alphav1.log-driver.syslog-facility"],
+		}
+
+		logConfig := dockercontainer.LogConfig{
+			Type:   "syslog",
+			Config: logConfigMap,
+		}
+		hc.LogConfig = logConfig
+	}
+
 	hc.Resources.Devices = devices
 
 	securityOpts, err := ds.getSecurityOpts(config.GetLinux().GetSecurityContext().GetSeccompProfilePath(), securityOptSeparator)
@@ -202,7 +222,17 @@ func (ds *dockerService) getContainerLogPath(containerID string) (string, string
 	if err != nil {
 		return "", "", fmt.Errorf("failed to inspect container %q: %v", containerID, err)
 	}
-	return info.Config.Labels[containerLogPathLabelKey], info.LogPath, nil
+
+	if info.LogPath != "" {
+		return info.Config.Labels[containerLogPathLabelKey], info.LogPath, nil
+	}
+
+	if strings.HasSuffix(ds.noJsonLogPath, "/") && len(ds.noJsonLogPath) > 1 {
+		ds.noJsonLogPath = strings.TrimSuffix(ds.noJsonLogPath, "/")
+	}
+	customLogPath := fmt.Sprintf("%s/%s/%s.log", ds.noJsonLogPath, info.ID, info.ID)
+
+	return info.Config.Labels[containerLogPathLabelKey], customLogPath, nil
 }
 
 // createContainerLogSymlink creates the symlink for docker container log.
@@ -223,6 +253,23 @@ func (ds *dockerService) createContainerLogSymlink(containerID string) error {
 		if err = ds.os.Remove(path); err == nil {
 			klog.Warningf("Deleted previously existing symlink file: %q", path)
 		}
+
+		// if log file is not exists, first create it
+		if _, err := os.Stat(realPath); os.IsNotExist(err) {
+			// create parent dir
+			parentDir := filepath.Dir(realPath)
+			if err := os.MkdirAll(parentDir, os.ModePerm); err != nil {
+				klog.Errorf("failed to create dir %s: %v", parentDir, err)
+			}
+			// create log file
+			file, err := os.Create(realPath)
+			defer file.Close()
+			if err != nil {
+				// failed to create file, but this is not a critical failure， print error.
+				klog.Errorf("%s is not exist. failed to create it : %v", realPath, err)
+			}
+		}
+
 		if err = ds.os.Symlink(realPath, path); err != nil {
 			return fmt.Errorf("failed to create symbolic link %q to the container log file %q for container %q: %v",
 				path, realPath, containerID, err)
@@ -246,7 +293,7 @@ func (ds *dockerService) createContainerLogSymlink(containerID string) error {
 
 // removeContainerLogSymlink removes the symlink for docker container log.
 func (ds *dockerService) removeContainerLogSymlink(containerID string) error {
-	path, _, err := ds.getContainerLogPath(containerID)
+	path, realPath, err := ds.getContainerLogPath(containerID)
 	if err != nil {
 		return fmt.Errorf("failed to get container %q log path: %v", containerID, err)
 	}
@@ -256,7 +303,17 @@ func (ds *dockerService) removeContainerLogSymlink(containerID string) error {
 		if err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("failed to remove container %q log symlink %q: %v", containerID, path, err)
 		}
+		// Need to delete syslog real file
+		if strings.HasPrefix(realPath, ds.noJsonLogPath) {
+			pathList := strings.Split(realPath, "/")
+			logDIR := strings.Join(pathList[:len(pathList)-1], "/")
+			err := ds.os.RemoveAll(logDIR)
+			if err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to remove container %q real logFile in syslog-driver %q: %v", containerID, realPath, err)
+			}
+		}
 	}
+
 	return nil
 }
 

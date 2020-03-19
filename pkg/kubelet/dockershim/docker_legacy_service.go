@@ -106,7 +106,7 @@ func (d *dockerService) GetContainerLogTail(uid kubetypes.UID, name, namespace s
 }
 
 // criSupportedLogDrivers are log drivers supported by native CRI integration.
-var criSupportedLogDrivers = []string{"json-file"}
+var criSupportedLogDrivers = []string{"json-file", "syslog"}
 
 // IsCRISupportedLogDriver checks whether the logging driver used by docker is
 // supported by native CRI integration.

@@ -191,7 +191,7 @@ func NewDockerClientFromConfig(config *ClientConfig) libdocker.Interface {
 // NewDockerService creates a new `DockerService` struct.
 // NOTE: Anything passed to DockerService should be eventually handled in another way when we switch to running the shim as a different process.
 func NewDockerService(config *ClientConfig, podSandboxImage string, streamingConfig *streaming.Config, pluginSettings *NetworkPluginSettings,
-	cgroupsName string, kubeCgroupDriver string, dockershimRootDir string, startLocalStreamingServer bool) (DockerService, error) {
+	cgroupsName string, kubeCgroupDriver string, dockershimRootDir string, startLocalStreamingServer bool, noJsonLogPath string) (DockerService, error) {
 
 	client := NewDockerClientFromConfig(config)
 
@@ -215,6 +215,7 @@ func NewDockerService(config *ClientConfig, podSandboxImage string, streamingCon
 		startLocalStreamingServer: startLocalStreamingServer,
 		networkReady:              make(map[string]bool),
 		containerCleanupInfos:     make(map[string]*containerCleanupInfo),
+		noJsonLogPath:             noJsonLogPath,
 	}
 
 	// check docker version compatibility.
@@ -315,6 +316,9 @@ type dockerService struct {
 	// (see `applyPlatformSpecificDockerConfig` and `performPlatformSpecificContainerCleanup`
 	// methods for more info).
 	containerCleanupInfos map[string]*containerCleanupInfo
+
+	// docker inspect返回的logPath为空的时候，log的存放路径。syslog driver就符合该你条件
+	noJsonLogPath string
 }
 
 // TODO: handle context.
