@@ -1120,6 +1120,10 @@ func (nc *Controller) tryUpdateNodeHealth(node *v1.Node) (time.Duration, v1.Node
 			// v1.NodeNetworkUnavailable,
 		}
 
+		// node心跳二次确认机制
+		// https://git-sa.nie.netease.com/whale/kubernetes/issues/42
+		// https://g.126.fm/03KznC8
+
 		nowTimestamp := nc.now()
 		for _, nodeConditionType := range nodeConditionTypes {
 			_, currentCondition := nodeutil.GetNodeCondition(&node.Status, nodeConditionType)
@@ -1133,7 +1137,7 @@ func (nc *Controller) tryUpdateNodeHealth(node *v1.Node) (time.Duration, v1.Node
 					LastHeartbeatTime:  node.CreationTimestamp,
 					LastTransitionTime: nowTimestamp,
 				})
-			} else {
+			} else if currentCondition.Type != v1.NodeReady{
 				klog.V(2).Infof("node %v hasn't been updated for %+v. Last %v is: %+v",
 					node.Name, nc.now().Time.Sub(nodeHealth.probeTimestamp.Time), nodeConditionType, currentCondition)
 				if currentCondition.Status != v1.ConditionUnknown {
@@ -1141,6 +1145,26 @@ func (nc *Controller) tryUpdateNodeHealth(node *v1.Node) (time.Duration, v1.Node
 					currentCondition.Reason = "NodeStatusUnknown"
 					currentCondition.Message = "Kubelet stopped posting node status."
 					currentCondition.LastTransitionTime = nowTimestamp
+				}
+			}else {
+				// 针对 currentCondition.Type == v1.NodeReady
+				// 对同步超时的node发起一次healthz请求，如果healthz返回ok，将observedReadyCondition改为true
+				// p.s Unknown的condition会触发eviction
+				klog.V(2).Infof("ensure kubelet status using kubelet healthz API")
+				healthz, err := callKubeletHealthz(node)
+				if err != nil || healthz == false {
+					klog.Errorf("call kubelet healthz api error: %v. Change ReadyCondition into Unknown, node: %v", err, node.Name)
+					if currentCondition.Status != v1.ConditionUnknown {
+						currentCondition.Status = v1.ConditionUnknown
+						currentCondition.Reason = "NodeStatusUnknown"
+						currentCondition.Message = "Kubelet stopped posting node status."
+						currentCondition.LastTransitionTime = nowTimestamp
+					}
+				}else {
+					klog.V(2).Infof("kubelet healthz api return OK, stay Ready, node: %v", node.Name)
+					currentReadyCondition.Status = v1.ConditionTrue
+					currentReadyCondition.Reason = "NodeStatusRisky"
+					currentReadyCondition.Message = "Kubelet stopped posting node status, but Kubelet healthz return OK"
 				}
 			}
 		}
