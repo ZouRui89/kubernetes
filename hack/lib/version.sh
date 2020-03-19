@@ -65,34 +65,38 @@ kube::version::get_version_vars() {
       fi
     fi
 
-    # Use git describe to find the version based on tags.
-    if [[ -n ${KUBE_GIT_VERSION-} ]] || KUBE_GIT_VERSION=$("${git[@]}" describe --tags --match='v*' --abbrev=14 "${KUBE_GIT_COMMIT}^{commit}" 2>/dev/null); then
-      # This translates the "git describe" to an actual semver.org
-      # compatible semantic version that looks something like this:
-      #   v1.1.0-alpha.0.6+84c76d1142ea4d
-      #
-      # TODO: We continue calling this "git version" because so many
-      # downstream consumers are expecting it there.
-      #
-      # These regexes are painful enough in sed...
-      # We don't want to do them in pure shell, so disable SC2001
-      # shellcheck disable=SC2001
-      DASHES_IN_VERSION=$(echo "${KUBE_GIT_VERSION}" | sed "s/[^-]//g")
-      if [[ "${DASHES_IN_VERSION}" == "---" ]] ; then
-        # shellcheck disable=SC2001
-        # We have distance to subversion (v1.1.0-subversion-1-gCommitHash)
-        KUBE_GIT_VERSION=$(echo "${KUBE_GIT_VERSION}" | sed "s/-\([0-9]\{1,\}\)-g\([0-9a-f]\{14\}\)$/.\1\+\2/")
-      elif [[ "${DASHES_IN_VERSION}" == "--" ]] ; then
-        # shellcheck disable=SC2001
-        # We have distance to base tag (v1.1.0-1-gCommitHash)
-        KUBE_GIT_VERSION=$(echo "${KUBE_GIT_VERSION}" | sed "s/-g\([0-9a-f]\{14\}\)$/+\1/")
-      fi
-      if [[ "${KUBE_GIT_TREE_STATE}" == "dirty" ]]; then
-        # git describe --dirty only considers changes to existing files, but
-        # that is problematic since new untracked .go files affect the build,
-        # so use our idea of "dirty" from git status instead.
-        KUBE_GIT_VERSION+="-dirty"
-      fi
+#    # Use git describe to find the version based on tags.
+#    if [[ -n ${KUBE_GIT_VERSION-} ]] || KUBE_GIT_VERSION=$("${git[@]}" describe --tags --match='v*' --abbrev=14 "${KUBE_GIT_COMMIT}^{commit}" 2>/dev/null); then
+#      # This translates the "git describe" to an actual semver.org
+#      # compatible semantic version that looks something like this:
+#      #   v1.1.0-alpha.0.6+84c76d1142ea4d
+#      #
+#      # TODO: We continue calling this "git version" because so many
+#      # downstream consumers are expecting it there.
+#      #
+#      # These regexes are painful enough in sed...
+#      # We don't want to do them in pure shell, so disable SC2001
+#      # shellcheck disable=SC2001
+#      DASHES_IN_VERSION=$(echo "${KUBE_GIT_VERSION}" | sed "s/[^-]//g")
+#      if [[ "${DASHES_IN_VERSION}" == "---" ]] ; then
+#        # shellcheck disable=SC2001
+#        # We have distance to subversion (v1.1.0-subversion-1-gCommitHash)
+#        KUBE_GIT_VERSION=$(echo "${KUBE_GIT_VERSION}" | sed "s/-\([0-9]\{1,\}\)-g\([0-9a-f]\{14\}\)$/.\1\+\2/")
+#      elif [[ "${DASHES_IN_VERSION}" == "--" ]] ; then
+#        # shellcheck disable=SC2001
+#        # We have distance to base tag (v1.1.0-1-gCommitHash)
+#        KUBE_GIT_VERSION=$(echo "${KUBE_GIT_VERSION}" | sed "s/-g\([0-9a-f]\{14\}\)$/+\1/")
+#      fi
+#      if [[ "${KUBE_GIT_TREE_STATE}" == "dirty" ]]; then
+#        # git describe --dirty only considers changes to existing files, but
+#        # that is problematic since new untracked .go files affect the build,
+#        # so use our idea of "dirty" from git status instead.
+#        KUBE_GIT_VERSION+="-dirty"
+#      fi
+
+      # https://git-sa.nie.netease.com/whale/kubernetes/commit/2cd593dfc047d2f4c714fe64acf068136f287aa3
+      # use env to override version suffix
+      KUBE_GIT_VERSION="$SYM_K8S_VERSION"
 
 
       # Try to match the "git describe" output to a regex to try to extract
@@ -112,7 +116,7 @@ kube::version::get_version_vars() {
           echo "Please see more details here: https://semver.org"
           exit 1
       fi
-    fi
+    #fi
   fi
 }
 
