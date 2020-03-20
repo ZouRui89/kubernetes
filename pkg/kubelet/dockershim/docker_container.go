@@ -19,8 +19,11 @@ package dockershim
 import (
 	"context"
 	"fmt"
+	"github.com/docker/go-units"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -178,12 +181,40 @@ func (ds *dockerService) CreateContainer(_ context.Context, r *runtimeapi.Create
 	}
 
 	// 添加对oomkiller disable 的支持
+	// https://g.126.fm/00GM932
 	if annotations["symphony.alphav1.oom-killer-disable"] == "true" {
 		klog.V(2).Infof("podSandboxID %s , containerName %s , setting oom-killer-disbale: %v",podSandboxID, containerName, annotations)
 		oomKillerDisable := true
 		hc.Resources.OomKillDisable = &oomKillerDisable
 	}
 
+	// ulimit的支持
+	ulimitStrList := []string{}
+	ulimits := []*units.Ulimit{}
+	if annotations["symphony.alphav1.ulimit"] != "" {
+		ulimitStrList = strings.Split(annotations["symphony.alphav1.ulimit"], ",")
+	}
+	// ulimitType格式： <type>=<soft>:<hard>
+	reg := regexp.MustCompile("\\w+=\\d+:\\d+")
+	for _, ulimitType := range ulimitStrList {
+		if m := reg.MatchString(ulimitType); !m {
+			klog.V(4).Infof("ulmit type error: %v, should be <type>=<soft>:<hard>, skipped", ulimitType)
+			break
+		}
+		tmpList := strings.Split(ulimitType, "=")
+		name := tmpList[0]
+		values := strings.Split(tmpList[1], ":")
+		soft, _ := strconv.ParseInt(values[0], 10, 64)
+		hard, _ := strconv.ParseInt(values[1], 10, 64)
+		ulimit := &units.Ulimit{
+			Name: name,
+			Soft: soft,
+			Hard: hard,
+		}
+		ulimits = append(ulimits, ulimit)
+	}
+
+	hc.Resources.Ulimits = ulimits
 	hc.Resources.Devices = devices
 
 	securityOpts, err := ds.getSecurityOpts(config.GetLinux().GetSecurityContext().GetSeccompProfilePath(), securityOptSeparator)

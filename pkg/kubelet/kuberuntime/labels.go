@@ -42,6 +42,8 @@ const (
 
 	//supprt OomKillerDisab
 	containerOomKillerDisableLabel         = "symphony.alphav1.oom-killer-disable"
+	// support ulimit
+	containerUlimitLabel                   = "symphony.alphav1.ulimit"
 )
 
 // Netease extension Log driver
@@ -129,6 +131,8 @@ func newContainerAnnotations(container *v1.Container, pod *v1.Pod, restartCount 
 	if pod.ObjectMeta.Annotations[containerOomKillerDisableLabel] == "true" {
 		annotations[containerOomKillerDisableLabel] = "true"
 	}
+
+	annotations[containerUlimitLabel] = pod.ObjectMeta.Annotations[containerUlimitLabel]
 
 	if pod.ObjectMeta.Annotations[containerLogDriverLabel] == "syslog" {
 		annotations[containerLogDriverLabel] = "syslog"
