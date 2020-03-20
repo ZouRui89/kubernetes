@@ -177,6 +177,13 @@ func (ds *dockerService) CreateContainer(_ context.Context, r *runtimeapi.Create
 		hc.LogConfig = logConfig
 	}
 
+	// 添加对oomkiller disable 的支持
+	if annotations["symphony.alphav1.oom-killer-disable"] == "true" {
+		klog.V(2).Infof("podSandboxID %s , containerName %s , setting oom-killer-disbale: %v",podSandboxID, containerName, annotations)
+		oomKillerDisable := true
+		hc.Resources.OomKillDisable = &oomKillerDisable
+	}
+
 	hc.Resources.Devices = devices
 
 	securityOpts, err := ds.getSecurityOpts(config.GetLinux().GetSecurityContext().GetSeccompProfilePath(), securityOptSeparator)

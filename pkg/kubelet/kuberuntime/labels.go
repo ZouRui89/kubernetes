@@ -39,6 +39,9 @@ const (
 	containerTerminationMessagePolicyLabel = "io.kubernetes.container.terminationMessagePolicy"
 	containerPreStopHandlerLabel           = "io.kubernetes.container.preStopHandler"
 	containerPortsLabel                    = "io.kubernetes.container.ports"
+
+	//supprt OomKillerDisab
+	containerOomKillerDisableLabel         = "symphony.alphav1.oom-killer-disable"
 )
 
 // Netease extension Log driver
@@ -122,6 +125,10 @@ func newContainerAnnotations(container *v1.Container, pod *v1.Pod, restartCount 
 	annotations[containerRestartCountLabel] = strconv.Itoa(restartCount)
 	annotations[containerTerminationMessagePathLabel] = container.TerminationMessagePath
 	annotations[containerTerminationMessagePolicyLabel] = string(container.TerminationMessagePolicy)
+
+	if pod.ObjectMeta.Annotations[containerOomKillerDisableLabel] == "true" {
+		annotations[containerOomKillerDisableLabel] = "true"
+	}
 
 	if pod.ObjectMeta.Annotations[containerLogDriverLabel] == "syslog" {
 		annotations[containerLogDriverLabel] = "syslog"
