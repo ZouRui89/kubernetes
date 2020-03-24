@@ -35,6 +35,8 @@ type ResourceConfig struct {
 	HugePageLimit map[int64]int64
 	// Maximum number of pids
 	PidsLimit *int64
+	// support oom-kill-disable
+	OomKillDisable *bool
 }
 
 // CgroupName is the abstract name of a cgroup prior to any driver specific conversion.

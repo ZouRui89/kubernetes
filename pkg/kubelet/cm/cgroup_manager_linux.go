@@ -381,6 +381,12 @@ func (m *cgroupManagerImpl) toResources(resourceConfig *ResourceConfig) *libcont
 			resources.PidsLimit = *resourceConfig.PidsLimit
 		}
 	}
+
+	// https://git-sa.nie.netease.com/whale/kubernetes/issues/40
+	if resourceConfig.OomKillDisable != nil {
+		resources.OomKillDisable = *resourceConfig.OomKillDisable
+	}
+
 	// if huge pages are enabled, we set them in libcontainer
 	// for each page size enumerated, set that value
 	pageSizes := sets.NewString()

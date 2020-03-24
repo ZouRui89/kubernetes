@@ -178,6 +178,14 @@ func ResourceConfigForPod(pod *v1.Pod, enforceCPULimits bool, cpuPeriod uint64) 
 		result.CpuShares = &shares
 	}
 	result.HugePageLimit = hugePageLimits
+	// 通过annotations信息判断是否需要设置oom-disable
+	// https://git-sa.nie.netease.com/whale/kubernetes/issues/40
+	podAnnotation := pod.GetAnnotations()
+	if podAnnotation["symphony.alphav1.oom-killer-disable"] == "true" {
+		oomKillDisable := true
+		result.OomKillDisable = &oomKillDisable
+	}
+
 	return result
 }
 
