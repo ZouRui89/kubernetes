@@ -23,6 +23,7 @@ package populator
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -327,6 +328,19 @@ func (dswp *desiredStateOfWorldPopulator) processPodVolumes(
 			continue
 		}
 
+		// for local volume
+		err = dswp.checkLocalVolumePV(pod, volumeSpec)
+		if err != nil {
+			klog.Errorf(
+				"Error processing volume %q for pod %q: %v",
+				podVolume.Name,
+				format.Pod(pod),
+				err)
+			allVolumesAdded = false
+			continue
+		}
+
+
 		// Add volume to desired state of world
 		_, err = dswp.desiredStateOfWorld.AddPodToVolume(
 			uniquePodName, pod, volumeSpec, podVolume.Name, volumeGidValue)
@@ -430,6 +444,22 @@ func volumeRequiresFSResize(pvc *v1.PersistentVolumeClaim, pv *v1.PersistentVolu
 	capacity := pvc.Status.Capacity[v1.ResourceStorage]
 	requested := pv.Spec.Capacity[v1.ResourceStorage]
 	return requested.Cmp(capacity) > 0
+}
+
+// added by wenbin01
+func (dswp *desiredStateOfWorldPopulator) checkLocalVolumePV(pod *v1.Pod, volumeSpec *volume.Spec) error {
+	if volumeSpec.PersistentVolume != nil {
+		storageClass := volumeSpec.PersistentVolume.Spec.StorageClassName
+		if storageClass == "local-volume" && volumeSpec.PersistentVolume.Spec.Local != nil {
+			pathList := strings.Split(volumeSpec.PersistentVolume.Spec.Local.Path, "/")
+			if len(pathList) > 0 && pathList[len(pathList)-1] == pod.Name {
+				return nil
+			}
+			return fmt.Errorf("local volume PV %s path hasn't been updated for pod %s", volumeSpec.PersistentVolume.Name, pod.GetName())
+		}
+		return nil
+	}
+	return nil
 }
 
 // podPreviouslyProcessed returns true if the volumes for this pod have already
