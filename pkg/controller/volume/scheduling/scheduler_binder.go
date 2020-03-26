@@ -657,6 +657,13 @@ func (b *volumeBinder) getPodVolumes(pod *v1.Pod) (boundClaims []*v1.PersistentV
 		if pvc == nil {
 			continue
 		}
+
+		// wenbin01 modify, skip volume bound check for our local volume
+		storageClassName := pvc.Spec.StorageClassName
+		if storageClassName != nil && *storageClassName == "local-volume" {
+			continue
+		}
+
 		if volumeBound {
 			boundClaims = append(boundClaims, pvc)
 		} else {

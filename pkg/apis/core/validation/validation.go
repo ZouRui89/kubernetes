@@ -1861,10 +1861,13 @@ func ValidatePersistentVolumeUpdate(newPv, oldPv *core.PersistentVolume) field.E
 		newPv.Spec.CSI.ControllerExpandSecretRef = nil
 	}
 
+	// wenbin01 modify, skip strict PersistentVolumeSource check when PV update
+	// see https://github.com/kubernetes/kubernetes/issues/54562
 	// PersistentVolumeSource should be immutable after creation.
-	if !apiequality.Semantic.DeepEqual(newPv.Spec.PersistentVolumeSource, oldPv.Spec.PersistentVolumeSource) {
-		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec", "persistentvolumesource"), "is immutable after creation"))
-	}
+	//if !apiequality.Semantic.DeepEqual(newPv.Spec.PersistentVolumeSource, oldPv.Spec.PersistentVolumeSource) {
+	//	allErrs = append(allErrs, field.Forbidden(field.NewPath("spec", "persistentvolumesource"), "is immutable after creation"))
+	//}
+
 	allErrs = append(allErrs, ValidateImmutableField(newPv.Spec.VolumeMode, oldPv.Spec.VolumeMode, field.NewPath("volumeMode"))...)
 
 	// Allow setting NodeAffinity if oldPv NodeAffinity was not set
