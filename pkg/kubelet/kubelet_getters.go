@@ -305,6 +305,30 @@ func (kl *Kubelet) getPodVolumePathListFromDisk(podUID types.UID) ([]string, err
 	}
 	for _, volumePluginDir := range volumePluginDirs {
 		volumePluginName := volumePluginDir.Name()
+		// fanqihong add
+		/*
+			专门为了gdc emptyDir日志方案，跳过
+			让上层在删除PodUID目录的时候，认为底层的emptyDir目录已经不存在了
+
+			其它四个类型的修改见 https://git-sa.nie.netease.com/whale/kubernetes/issues/157
+
+		*/
+		if volumePluginName == "kubernetes.io~empty-dir" {
+			continue
+		}
+		if volumePluginName == "kubernetes.io~configmap" {
+			continue
+		}
+		if volumePluginName == "kubernetes.io~secret" {
+			continue
+		}
+		if volumePluginName == "kubernetes.io~downward-api" {
+			continue
+		}
+		if volumePluginName == "kubernetes.io~git-repo" {
+			continue
+		}
+
 		volumePluginPath := filepath.Join(podVolDir, volumePluginName)
 		volumeDirs, err := utilpath.ReadDirNoStat(volumePluginPath)
 		if err != nil {
@@ -314,6 +338,9 @@ func (kl *Kubelet) getPodVolumePathListFromDisk(podUID types.UID) ([]string, err
 			volumes = append(volumes, filepath.Join(volumePluginPath, volumeDir))
 		}
 	}
+	// for debug
+	klog.V(5).Infof("Orphaned pod %s still exist volume %+v", podUID, volumes)
+
 	return volumes, nil
 }
 
