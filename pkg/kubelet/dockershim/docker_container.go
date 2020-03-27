@@ -19,13 +19,14 @@ package dockershim
 import (
 	"context"
 	"fmt"
-	"github.com/docker/go-units"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/docker/go-units"
 
 	dockertypes "github.com/docker/docker/api/types"
 	dockercontainer "github.com/docker/docker/api/types/container"
@@ -183,7 +184,7 @@ func (ds *dockerService) CreateContainer(_ context.Context, r *runtimeapi.Create
 	// 添加对oomkiller disable 的支持
 	// https://g.126.fm/00GM932
 	if annotations["symphony.alphav1.oom-killer-disable"] == "true" {
-		klog.V(2).Infof("podSandboxID %s , containerName %s , setting oom-killer-disbale: %v",podSandboxID, containerName, annotations)
+		klog.V(2).Infof("podSandboxID %s , containerName %s , setting oom-killer-disbale: %v", podSandboxID, containerName, annotations)
 		oomKillerDisable := true
 		hc.Resources.OomKillDisable = &oomKillerDisable
 	}
@@ -268,6 +269,10 @@ func (ds *dockerService) getContainerLogPath(containerID string) (string, string
 	if strings.HasSuffix(ds.noJsonLogPath, "/") && len(ds.noJsonLogPath) > 1 {
 		ds.noJsonLogPath = strings.TrimSuffix(ds.noJsonLogPath, "/")
 	}
+	if info.ID == "" {
+		return "", "", fmt.Errorf("failed to get container full ID %q: %v", containerID, err)
+	}
+
 	customLogPath := fmt.Sprintf("%s/%s/%s.log", ds.noJsonLogPath, info.ID, info.ID)
 
 	return info.Config.Labels[containerLogPathLabelKey], customLogPath, nil

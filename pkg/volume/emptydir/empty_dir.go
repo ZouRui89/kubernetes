@@ -419,10 +419,15 @@ func (ed *emptyDir) teardownDefault(dir string) error {
 	}
 	// Renaming the directory is not required anymore because the operation executor
 	// now handles duplicate operations on the same volume
-	err = os.RemoveAll(dir)
-	if err != nil {
-		return err
-	}
+
+	// fanqihong modify
+	// commit: https://git-sa.nie.netease.com/whale/kubernetes/commit/0ad26cb38a099b650eb4459bc2e4e579de91c8a8
+	klog.Infof("skip delete empty dir for gdc-log-service %s, since it has bounded to pod metadata", dir)
+	// err = os.RemoveAll(dir)
+	// if err != nil {
+	// 	return err
+	// }
+
 	return nil
 }
 

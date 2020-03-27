@@ -274,6 +274,7 @@ var standardFinalizers = sets.NewString(
 	string(core.FinalizerKubernetes),
 	metav1.FinalizerOrphanDependents,
 	metav1.FinalizerDeleteDependents,
+	"finalizer.logservice.gdc",
 )
 
 // IsStandardFinalizerName checks if the input string is a standard finalizer name
