@@ -1850,6 +1850,16 @@ func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHand
 		// reset backoff if we have a success
 		duration = base
 
+		// add by gzchenyifan
+		if _, err := kl.nodeLister.Get(string(kl.nodeName)); err != nil {
+			klog.Errorf("skipping pod synchronization until get nodeInfo from apiserver success - %v", err)
+			time.Sleep(duration)
+			duration = time.Duration(math.Min(float64(max), factor*float64(duration)))
+			continue
+		}
+		// reset backoff if we have a success
+		duration = base
+
 		kl.syncLoopMonitor.Store(kl.clock.Now())
 		if !kl.syncLoopIteration(updates, handler, syncTicker.C, housekeepingTicker.C, plegCh) {
 			break

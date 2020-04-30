@@ -242,9 +242,11 @@ func (kl *Kubelet) GetNode() (*v1.Node, error) {
 // zero capacity, and the default labels.
 func (kl *Kubelet) getNodeAnyWay() (*v1.Node, error) {
 	if kl.kubeClient != nil {
-		if n, err := kl.nodeLister.Get(string(kl.nodeName)); err == nil {
+		n, err := kl.nodeLister.Get(string(kl.nodeName))
+		if err == nil {
 			return n, nil
 		}
+		klog.Errorf("get node error: %v", err)
 	}
 	return kl.initialNode(context.TODO())
 }
