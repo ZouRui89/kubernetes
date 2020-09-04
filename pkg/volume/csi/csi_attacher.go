@@ -41,6 +41,8 @@ import (
 const (
 	persistentVolumeInGlobalPath = "pv"
 	globalMountInGlobalPath      = "globalmount"
+
+	pvCephMountPathKey = "pv-ceph-mount-path"
 )
 
 type csiAttacher struct {
@@ -327,6 +329,10 @@ func (c *csiAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMo
 	}
 
 	fsType := csiSource.FSType
+
+	// added by zourui
+	nodeStageSecrets[pvCephMountPathKey] = spec.PersistentVolume.Annotations[pvCephMountPathKey]
+
 	err = csi.NodeStageVolume(ctx,
 		csiSource.VolumeHandle,
 		publishContext,
