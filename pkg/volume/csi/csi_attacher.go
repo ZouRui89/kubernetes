@@ -317,6 +317,21 @@ func (c *csiAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMo
 		}
 	}
 
+	// added by zourui
+	// ControllerExpandSecretRef中存放admin keyring信息
+	nodeStagePreSecrets := map[string]string{}
+	if csiSource.ControllerExpandSecretRef != nil {
+		nodeStagePreSecrets, err = getCredentialsFromSecret(c.k8s, csiSource.ControllerExpandSecretRef)
+		if err != nil {
+			err = fmt.Errorf("fetching NodeStagePreSecretRef %s/%s failed: %v",
+				csiSource.ControllerExpandSecretRef.Namespace, csiSource.ControllerExpandSecretRef.Name, err)
+			return err
+		}
+	}
+	for k, v := range nodeStagePreSecrets {
+		nodeStageSecrets[k] = v
+	}
+
 	//TODO (vladimirvivien) implement better AccessModes mapping between k8s and CSI
 	accessMode := v1.ReadWriteOnce
 	if spec.PersistentVolume.Spec.AccessModes != nil {
