@@ -112,6 +112,9 @@ func (dswp *desiredStateOfWorldPopulator) populatorLoopFunc() func() {
 
 // Iterate through all pods in desired state of world, and remove if they no
 // longer exist in the informer
+// 对于dws中存在的pod
+// 逐一和apiserver中的pod列表进行比较
+// 从dsw.nodesManaged中移除不存在的pod
 func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods() {
 	for dswPodUID, dswPodToAdd := range dswp.desiredStateOfWorld.GetPodToAdd() {
 		dswPodKey, err := kcache.MetaNamespaceKeyFunc(dswPodToAdd.Pod)
@@ -169,6 +172,8 @@ func (dswp *desiredStateOfWorldPopulator) findAndAddActivePods() {
 			// Do not add volumes for terminated pods
 			continue
 		}
+		// 根据从apiserver拉取的最新pods列表
+		// 更新dsw.nodesManaged
 		util.ProcessPodVolumes(pod, true,
 			dswp.desiredStateOfWorld, dswp.volumePluginMgr, dswp.pvcLister, dswp.pvLister, dswp.csiMigratedPluginManager, dswp.intreeToCSITranslator)
 

@@ -186,6 +186,8 @@ func DetermineVolumeAction(pod *v1.Pod, desiredStateOfWorld cache.DesiredStateOf
 
 // ProcessPodVolumes processes the volumes in the given pod and adds them to the
 // desired state of the world if addVolumes is true, otherwise it removes them.
+// 根据从apiserver拉取的最新pods列表
+// 更新dsw.nodesManaged
 func ProcessPodVolumes(pod *v1.Pod, addVolumes bool, desiredStateOfWorld cache.DesiredStateOfWorld, volumePluginMgr *volume.VolumePluginMgr, pvcLister corelisters.PersistentVolumeClaimLister, pvLister corelisters.PersistentVolumeLister, csiMigratedPluginManager csimigration.PluginManager, csiTranslator csimigration.InTreeToCSITranslator) {
 	if pod == nil {
 		return
@@ -241,7 +243,7 @@ func ProcessPodVolumes(pod *v1.Pod, addVolumes bool, desiredStateOfWorld cache.D
 				err)
 			continue
 		}
-
+			// pod的uid
 		uniquePodName := util.GetUniquePodName(pod)
 		if addVolumes {
 			// Add volume to desired state of world
@@ -258,6 +260,7 @@ func ProcessPodVolumes(pod *v1.Pod, addVolumes bool, desiredStateOfWorld cache.D
 
 		} else {
 			// Remove volume from desired state of world
+			// e.g kubernetes.io/csi/cephfs.csi.ceph.com^0001-0005-whale-0000000000000001-630680b5-0dff-11eb-a14d-246e968eeda4
 			uniqueVolumeName, err := util.GetUniqueVolumeNameFromSpec(
 				attachableVolumePlugin, volumeSpec)
 			if err != nil {

@@ -303,6 +303,7 @@ func (p *csiPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 	}
 
 	// return driverName<separator>volumeHandle
+	// e.g cephfs.csi.ceph.com^0001-0005-whale-0000000000000001-630680b5-0dff-11eb-a14d-246e968eeda4
 	return fmt.Sprintf("%s%s%s", csi.Driver, volNameSep, csi.VolumeHandle), nil
 }
 

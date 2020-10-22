@@ -170,11 +170,23 @@ func (rc *reconciler) isMultiAttachForbidden(volumeSpec *volume.Spec) bool {
 	return false
 }
 
+// 对于asw中维护的所有volumes，逐个检查在dsw中是否存在
+// 否，更新asw.nodesToUpdateStatusFor[nodeName].volumesToReportAsAttached
+//  （1）删除key volumeName
+//	（2）同时将node的状态设置为nodeToUpdate.statusUpdateNeeded = true
+//  （3）用asw.nodesToUpdateStatusFor中信息，向apiserver更新node.Status.VolumesAttached
+//  （4）最后执行detach操作
+// 对于dsw中所有的attachedVolumes，逐个检查是否存在asw中是否存在
+// 否，执行Attach操作
+// Attach操作中会更新asw中volumes-node
 func (rc *reconciler) reconcile() {
 	// Detaches are triggered before attaches so that volumes referenced by
 	// pods that are rescheduled to a different node are detached first.
 
 	// Ensure volumes that should be detached are detached.
+
+	// asw.attachedVolumes
+	// dsw.nodesManaged
 	for _, attachedVolume := range rc.actualStateOfWorld.GetAttachedVolumes() {
 		if !rc.desiredStateOfWorld.VolumeExists(
 			attachedVolume.VolumeName, attachedVolume.NodeName) {
@@ -188,6 +200,8 @@ func (rc *reconciler) reconcile() {
 			}
 
 			// Set the detach request time
+			// 设置为第一次尝试detach的时间
+			// 返回上次detach后经过的时间
 			elapsedTime, err := rc.actualStateOfWorld.SetDetachRequestTime(attachedVolume.VolumeName, attachedVolume.NodeName)
 			if err != nil {
 				klog.Errorf("Cannot trigger detach because it fails to set detach request time with error %v", err)
@@ -203,6 +217,9 @@ func (rc *reconciler) reconcile() {
 
 			// Before triggering volume detach, mark volume as detached and update the node status
 			// If it fails to update node status, skip detach volume
+			// 更新asw.nodesToUpdateStatusFor[nodeName].volumesToReportAsAttached
+			// 删除key volumeName
+			// 同时将node的状态设置为nodeToUpdate.statusUpdateNeeded = true
 			err = rc.actualStateOfWorld.RemoveVolumeFromReportAsAttached(attachedVolume.VolumeName, attachedVolume.NodeName)
 			if err != nil {
 				klog.V(5).Infof("RemoveVolumeFromReportAsAttached failed while removing volume %q from node %q with: %v",
@@ -212,6 +229,8 @@ func (rc *reconciler) reconcile() {
 			}
 
 			// Update Node Status to indicate volume is no longer safe to mount.
+			// 用asw.nodesToUpdateStatusFor中信息
+			// 向apiserver更新node.Status.VolumesAttached
 			err = rc.nodeStatusUpdater.UpdateNodeStatuses()
 			if err != nil {
 				// Skip detaching this volume if unable to update node status
@@ -223,6 +242,8 @@ func (rc *reconciler) reconcile() {
 			// If timeout is true, skip verifySafeToDetach check
 			klog.V(5).Infof(attachedVolume.GenerateMsgDetailed("Starting attacherDetacher.DetachVolume", ""))
 			verifySafeToDetach := !timeout
+
+			// todo detach具体做了什么
 			err = rc.attacherDetacher.DetachVolume(attachedVolume.AttachedVolume, verifySafeToDetach, rc.actualStateOfWorld)
 			if err == nil {
 				if !timeout {
@@ -240,15 +261,23 @@ func (rc *reconciler) reconcile() {
 		}
 	}
 
+	// 对于dsw中所有的attachedVolumes，逐个检查是否存在asw中是否存在
+	// 否，执行Attach操作
+	// Attach操作中会更新asw中volumes-node
 	rc.attachDesiredVolumes()
 
 	// Update Node Status
+	// 用asw.nodesToUpdateStatusFor中信息
+	// 向apiserver更新node.Status.VolumesAttached
 	err := rc.nodeStatusUpdater.UpdateNodeStatuses()
 	if err != nil {
 		klog.Warningf("UpdateNodeStatuses failed with: %v", err)
 	}
 }
 
+// 对于dsw中所有的attachedVolumes，逐个检查是否存在asw中是否存在
+// 否，执行Attach操作
+// Attach操作中会更新asw中volumes-node
 func (rc *reconciler) attachDesiredVolumes() {
 	// Ensure volumes that should be attached are attached.
 	for _, volumeToAttach := range rc.desiredStateOfWorld.GetVolumesToAttach() {
@@ -257,6 +286,9 @@ func (rc *reconciler) attachDesiredVolumes() {
 			if klog.V(5) {
 				klog.Infof(volumeToAttach.GenerateMsgDetailed("Volume attached--touching", ""))
 			}
+			// ？？
+			// ResetDetachRequestTime resets the detachRequestTime to 0 which indicates there is no detach
+			// request any more for the volume
 			rc.actualStateOfWorld.ResetDetachRequestTime(volumeToAttach.VolumeName, volumeToAttach.NodeName)
 			continue
 		}
@@ -283,6 +315,9 @@ func (rc *reconciler) attachDesiredVolumes() {
 		if klog.V(5) {
 			klog.Infof(volumeToAttach.GenerateMsgDetailed("Starting attacherDetacher.AttachVolume", ""))
 		}
+
+		// 前面也没啥操作
+		// 直接attach
 		err := rc.attacherDetacher.AttachVolume(volumeToAttach.VolumeToAttach, rc.actualStateOfWorld)
 		if err == nil {
 			klog.Infof(volumeToAttach.GenerateMsgDetailed("attacherDetacher.AttachVolume started", ""))

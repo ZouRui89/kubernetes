@@ -354,17 +354,50 @@ func (adc *attachDetachController) Run(stopCh <-chan struct{}) {
 		return
 	}
 
+	// 根据apiserver中拉取到的node信息
+	// 更新asw和dsw
+	// （1）更新asw.attachedVolumes中volume-node信息，先依据node.Status.VolumesAttached更新时默认volume同时完成了attach和mount
+	//      再通过node.Status.VolumesInUse中是否存在这个volumeName，重新设置mount
+	// （2）更新asw.nodesToUpdateStatusFor，添加node-volume信息
+	// （3）更新dsw.nodesManaged中node信息
 	err := adc.populateActualStateOfWorld()
 	if err != nil {
 		klog.Errorf("Error populating the actual state of world: %v", err)
 	}
+
+	// 根据从apiserver中拉取到的pod信息
+	// 更新dsw和asw
+	// （1）更新dsw.nodesManaged中pod信息
+	// （2）对于pod中的每个volume，逐个更新：如果asw中volume-node的attachedConfirmed=true，更新asw mountByNode=true，同时更新devicePath
 	err = adc.populateDesiredStateOfWorld()
 	if err != nil {
 		klog.Errorf("Error populating the desired state of world: %v", err)
 	}
+
+	// 对于asw中维护的所有volumes，逐个检查在dsw中是否存在
+	// 否，更新asw.nodesToUpdateStatusFor[nodeName].volumesToReportAsAttached
+	//  （1）删除key volumeName
+	//	（2）同时将node的状态设置为nodeToUpdate.statusUpdateNeeded = true
+	//  （3）用asw.nodesToUpdateStatusFor中信息，向apiserver更新node.Status.VolumesAttached
+	//  （4）最后执行【detach】操作
+	// 对于dsw中所有的attachedVolumes，逐个检查是否存在asw中是否存在
+	// 否，执行【Attach】操作
+	// Attach操作中会更新asw中volumes-node
+	// 用asw.nodesToUpdateStatusFor中信息，向apiserver更新node.Status.VolumesAttached
 	go adc.reconciler.Run(stopCh)
+
+	// （1）对于dws中存在的pod
+	// 逐一和apiserver中的pod列表进行比较
+	// 从dsw.nodesManaged中移除不存在的pod
+	// （2）根据从apiserver拉取的最新pods列表
+	// 更新dsw.nodesManaged
 	go adc.desiredStateOfWorldPopulator.Run(stopCh)
+
+
+	// 对于新增的pvc，以pvc的ns/name为索引，拿到pod
+	// 更新dsw.nodesManaged
 	go wait.Until(adc.pvcWorker, time.Second, stopCh)
+
 	metrics.Register(adc.pvcLister,
 		adc.pvLister,
 		adc.podLister,
@@ -377,6 +410,12 @@ func (adc *attachDetachController) Run(stopCh <-chan struct{}) {
 	<-stopCh
 }
 
+// 根据apiserver中拉取到的node信息
+// 更新asw和dsw
+// （1）更新asw.attachedVolumes中volume-node信息，先依据node.Status.VolumesAttached更新时默认volume同时完成了attach和mount
+//      再通过node.Status.VolumesInUse中是否存在这个volumeName，重新设置mount
+// （2）更新asw.nodesToUpdateStatusFor，添加node-volume信息
+// （3）更新dsw.nodesManaged中node信息
 func (adc *attachDetachController) populateActualStateOfWorld() error {
 	klog.V(5).Infof("Populating ActualStateOfworld")
 	nodes, err := adc.nodeLister.List(labels.Everything())
@@ -393,17 +432,26 @@ func (adc *attachDetachController) populateActualStateOfWorld() error {
 			// volume spec is not needed to detach a volume. If the volume is used by a pod, it
 			// its spec can be: this would happen during in the populateDesiredStateOfWorld which
 			// scans the pods and updates their volumes in the ActualStateOfWorld too.
+
+			// 更新asw.attachedVolumes和asw.nodesToUpdateStatusFor
+			// 在更新asw.attachedVolumes时，默认volume在node上完成了attach和mount
+			// asw.nodesToUpdateStatusFor中只存放需要更新的node-volumes，虽然有statusUpdatedNeeded参数
 			err = adc.actualStateOfWorld.MarkVolumeAsAttached(uniqueName, nil /* VolumeSpec */, nodeName, attachedVolume.DevicePath)
 			if err != nil {
 				klog.Errorf("Failed to mark the volume as attached: %v", err)
 				continue
 			}
+			// 用node.Status.VolumesInUse更新nodeObj.mountedByNode
+			// 前面默认mount的volume，在这里修正
 			adc.processVolumesInUse(nodeName, node.Status.VolumesInUse)
+			// 对于所有带有volumes.kubernetes.io/controller-managed-attach-detach: "true" annotation的node
+			// 加入到dsw.nodesManaged中
 			adc.addNodeToDswp(node, types.NodeName(node.Name))
 		}
 	}
 	return nil
 }
+
 
 func (adc *attachDetachController) getNodeVolumeDevicePath(
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) (string, error) {
@@ -427,6 +475,10 @@ func (adc *attachDetachController) getNodeVolumeDevicePath(
 	return devicePath, err
 }
 
+// 根据从apiserver中拉取到的pod信息
+// 更新dsw和asw
+// （1）更新dsw.nodesManaged中pod信息
+// （2）对于pod中的每个volume，逐个更新：如果asw中volume-node的attachedConfirmed=true，更新asw mountByNode=true，同时更新devicePath
 func (adc *attachDetachController) populateDesiredStateOfWorld() error {
 	klog.V(5).Infof("Populating DesiredStateOfworld")
 
@@ -436,7 +488,10 @@ func (adc *attachDetachController) populateDesiredStateOfWorld() error {
 	}
 	for _, pod := range pods {
 		podToAdd := pod
+
+		// 更新dsw.nodesManaged中pod信息
 		adc.podAdd(podToAdd)
+
 		for _, podVolume := range podToAdd.Spec.Volumes {
 			nodeName := types.NodeName(podToAdd.Spec.NodeName)
 			// The volume specs present in the ActualStateOfWorld are nil, let's replace those
@@ -472,7 +527,11 @@ func (adc *attachDetachController) populateDesiredStateOfWorld() error {
 					err)
 				continue
 			}
+			// 这里的逻辑有点看不懂？
+			// 如果发现asw中node.attachedConfirmed=true
+			// 更新asw mountByNode=true，同时更新devicePath
 			if adc.actualStateOfWorld.IsVolumeAttachedToNode(volumeName, nodeName) {
+				// devicePath的数据来源是node.Status.VolumesAttached
 				devicePath, err := adc.getNodeVolumeDevicePath(volumeName, nodeName)
 				if err != nil {
 					klog.Errorf("Failed to find device path: %v", err)
@@ -499,11 +558,14 @@ func (adc *attachDetachController) podAdd(obj interface{}) {
 		return
 	}
 
+	// 只有在node的keepTerminatedPodVolume参数为false，且pod处于非running状态时
+	// 才会返回false
 	volumeActionFlag := util.DetermineVolumeAction(
 		pod,
 		adc.desiredStateOfWorld,
 		true /* default volume action */)
 
+	// 更新dsw.nodesManaged中pod信息
 	util.ProcessPodVolumes(pod, volumeActionFlag, /* addVolumes */
 		adc.desiredStateOfWorld, &adc.volumePluginMgr, adc.pvcLister, adc.pvLister, adc.csiMigratedPluginManager, adc.intreeToCSITranslator)
 }
@@ -558,6 +620,7 @@ func (adc *attachDetachController) nodeAdd(obj interface{}) {
 	adc.actualStateOfWorld.SetNodeStatusUpdateNeeded(nodeName)
 }
 
+// 更新asw
 func (adc *attachDetachController) nodeUpdate(oldObj, newObj interface{}) {
 	node, ok := newObj.(*v1.Node)
 	// TODO: investigate if nodeName is empty then if we can return
@@ -582,6 +645,7 @@ func (adc *attachDetachController) nodeDelete(obj interface{}) {
 		klog.Infof("error removing node %q from desired-state-of-world: %v", nodeName, err)
 	}
 
+	// asw中mountByNode=false
 	adc.processVolumesInUse(nodeName, node.Status.VolumesInUse)
 }
 
@@ -621,6 +685,8 @@ func (adc *attachDetachController) processNextItem() bool {
 	return true
 }
 
+// 对于新增的pvc，以pvc的ns/name为索引，拿到pod
+// 更新dsw.nodesManaged
 func (adc *attachDetachController) syncPVCByKey(key string) error {
 	klog.V(5).Infof("syncPVCByKey[%s]", key)
 	namespace, name, err := kcache.SplitMetaNamespaceKey(key)
@@ -666,6 +732,8 @@ func (adc *attachDetachController) syncPVCByKey(key string) error {
 // according to the specified Node's Status.VolumesInUse and updates the
 // corresponding volume in the actual state of the world to indicate that it is
 // mounted.
+// node.Status.VolumesInUse表明volume mount成功
+// 更新nodeObj.mountedByNode
 func (adc *attachDetachController) processVolumesInUse(
 	nodeName types.NodeName, volumesInUse []v1.UniqueVolumeName) {
 	klog.V(4).Infof("processVolumesInUse for node %q", nodeName)

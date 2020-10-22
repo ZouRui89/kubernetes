@@ -56,6 +56,8 @@ type nodeStatusUpdater struct {
 	actualStateOfWorld cache.ActualStateOfWorld
 }
 
+// 用asw.nodesToUpdateStatusFor中信息
+// 向apiserver更新node.Status.VolumesAttached
 func (nsu *nodeStatusUpdater) UpdateNodeStatuses() error {
 	// TODO: investigate right behavior if nodeName is empty
 	// kubernetes/kubernetes/issues/37777
@@ -78,6 +80,7 @@ func (nsu *nodeStatusUpdater) UpdateNodeStatuses() error {
 			continue
 		}
 
+		// 向apiserver更新node.Status.VolumesAttached
 		if err := nsu.updateNodeStatus(nodeName, nodeObj, attachedVolumes); err != nil {
 			// If update node status fails, reset flag statusUpdateNeeded back to true
 			// to indicate this node status needs to be updated again

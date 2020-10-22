@@ -275,6 +275,11 @@ func (asw *actualStateOfWorld) AddVolumeToReportAsAttached(
 	asw.addVolumeToReportAsAttached(volumeName, nodeName)
 }
 
+// （1）更新asw.attachedVolumes（volume - nodes）
+// 默认mountedByNode=true
+// （2）如果传入isAttached参数为true，更新asw.nodesToUpdateStatusFor
+// 检查asw.nodesToUpdateStatusFor中node和volume是否存在
+// 否则，设置statusUpdateNeeded为true，这个值是node维度的
 func (asw *actualStateOfWorld) AddVolumeNode(
 	uniqueName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName, devicePath string, isAttached bool) (v1.UniqueVolumeName, error) {
 	volumeName := uniqueName
@@ -383,6 +388,7 @@ func (asw *actualStateOfWorld) ResetDetachRequestTime(
 	volumeObj.nodesAttachedTo[nodeName] = nodeObj
 }
 
+// 设置为第一次尝试detach的时间
 func (asw *actualStateOfWorld) SetDetachRequestTime(
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) (time.Duration, error) {
 	asw.Lock()
@@ -430,6 +436,9 @@ func (asw *actualStateOfWorld) getNodeAndVolume(
 
 // Remove the volumeName from the node's volumesToReportAsAttached list
 // This is an internal function and caller should acquire and release the lock
+// 更新asw.nodesToUpdateStatusFor[nodeName].volumesToReportAsAttached
+// 删除key volumeName
+// 同时将node的状态设置为nodeToUpdate.statusUpdateNeeded = true
 func (asw *actualStateOfWorld) removeVolumeFromReportAsAttached(
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) error {
 
@@ -452,6 +461,8 @@ func (asw *actualStateOfWorld) removeVolumeFromReportAsAttached(
 
 // Add the volumeName to the node's volumesToReportAsAttached list
 // This is an internal function and caller should acquire and release the lock
+// 检查asw.nodesToUpdateStatusFor中node和volume是否存在
+// 都不存在时，设置statusUpdateNeeded为true，这个值是node维度的
 func (asw *actualStateOfWorld) addVolumeToReportAsAttached(
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
 	// In case the volume/node entry is no longer in attachedVolume list, skip the rest
